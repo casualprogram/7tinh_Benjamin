@@ -1,0 +1,12 @@
+{
+  "name": "7tinh_discord_bot",
+  "version": "1.0.0",
+  "description": "A private bot for 7tinh hub members",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
