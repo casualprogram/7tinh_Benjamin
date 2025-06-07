@@ -3,6 +3,7 @@ import { resolve } from "path";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import fs from "fs";
 import https from "https";
+import saveImage from "../utilities/save-images.js";
 
 dotenv.config({ path: resolve("../../.env") });
 
@@ -40,60 +41,13 @@ client.on("messageCreate", async (message) => {
     return message.reply(`?`);
   }
 
-  //   // SAVE IMAGES LOGIC
-  //   if (
-  //     message.channel.isThread() && // Check if the message is in a thread
-  //     message.channel.name.startsWith("Legit Check:") // Check if the message is in a thread that starts with "Legit Check:"
-  //   ) {
-  //     // Check if the message has attachments
-  //     if (message.attachments.size > 0) {
-  //       for (const attachment of message.attachments.values()) {
-  //         // Check if the attachment is an image
-  //         if (attachment.contentType?.startsWith("image/")) {
-  //           try {
-  //             // Create the shoePics directory if it doesn't exist
-  //             const fileExtension = attachment.name.split(".").pop();
-  //             const uniqueFilenName = `${Date.now()}-${Math.random()
-  //               .toString(36)
-  //               .substring(2, 15)}.${fileExtension}`;
-  //             const imagePath = resolve(shoePicsDir, uniqueFilenName);
-
-  //             //DownLload the image
-  //             const file = fs.createWriteStream(imagePath);
-
-  //             // Use https to download the image
-  //             https
-  //               .get(attachment.url, (response) => {
-  //                 response.pipe(file);
-  //                 file.on("finish", () => {
-  //                   file.close();
-  //                   console.log(
-  //                     `Image downloaded and saved as ${uniqueFilenName}`
-  //                   );
-  //                   message.react("✅");
-  //                 });
-  //               })
-  //               .on("error", (err) => {
-  //                 console.error(`Error downloading image: ${err.message}`);
-  //                 message.react(
-  //                   "Tới đây cái làm biếng quá, thôi thôi kêu ông Tín đi nha"
-  //                 );
-  //               });
-  //           } catch (err) {
-  //             console.log("Error processing attachment :", err);
-  //           }
-  //         }
-  //       }
-  //     }
-  //   }
-
   if (message.content.startsWith(PREFIX)) {
     const [CMD_NAME, ...args] = message.content
       .trim()
       .substring(PREFIX.length)
       .split(/\s+/);
 
-    console.log(`Command received: ${CMD_NAME} \nwith args: ${args.join(" ")}`);
+    console.log(`Command received: ${CMD_NAME} \nwith sku: ${args.join(" ")}`);
 
     if (CMD_NAME === "legitcheck") {
       // Handle the legit check command
@@ -117,11 +71,82 @@ client.on("messageCreate", async (message) => {
           content: `Chào ${message.author}, gửi tui mấy tấm hình của món đồ cần check,\nxong cái nào sẵn sàng thì dùng lệnh \n> \`${PREFIX}check SKU_OF_THE_SHOE\` \n\n> thí dụ : \`${PREFIX}check HV8563-600\` `,
         });
 
-        const message_tu_user = await legitCheckThread.messages.fetch();
-
-        await message.reply(`Mại vô mại vô : ${legitCheckThread.toString()}`);
+        await message.reply(`Vô đây bạn ơi: ${legitCheckThread.toString()}`);
       } catch (error) {
         console.error("Error creating thread:", error);
+        return message.reply("tui lam bieng qua, lien he admin nhe");
+      }
+
+      // if the user use command check
+    } else if (CMD_NAME === "check") {
+      // check if message is in a legit check thread
+      if (
+        !message.channel.isThread() ||
+        !message.channel.name.startsWith("Legit Check:")
+      ) {
+        // if not, remind them
+        return message.reply(
+          "Tạo threads trước đã !\ndùng lệnh `!7tinh_legitcheck` để tạo threads"
+        );
+      }
+      // collect SKU
+      const sku = args[0];
+
+      // check if sku is provided
+      if (!sku) {
+        return message.reply("cho xin SKU của đôi giày cái");
+      }
+
+      // everything seems good, move to legit check phase
+      try {
+        await message.reply("Đang check đôi giày của bạn, đợi xíu nha");
+
+        // get all messages in the thread so far
+
+        const allMessage = await message.channel.messages.fetch({ limit: 100 });
+
+        const chatHist = [];
+        const imageAttachments = [];
+
+        // iterate through ever message
+        for (const msg of allMessage.values()) {
+          // if message is the command then we skip
+          if (msg.id === message.id) continue;
+          if (msg.MessageContent) {
+            chatHist.push({
+              role: "user",
+              content: msg.content,
+            });
+          }
+          console.log(`Message from ${msg.author.tag}: ${msg.content}`);
+          // if message has some sort of attachments
+          if (msg.attachments.size > 0) {
+            // we iterate through each attachment and check if it is an image
+            for (const attachment of msg.attachments.values()) {
+              if (attachment.contentType?.startsWith("image/")) {
+                // push the image attachment to the array
+                imageAttachments.push(attachment);
+              }
+            }
+          }
+        }
+
+        // if no image founded, remind user
+        if (imageAttachments.length === 0) {
+          return message.reply("hình đâu?\nđâu thấy hình nào đâu ta?");
+        }
+
+        // save the images to the shoePics directory.
+        const savePromises = imageAttachments.map((att) =>
+          saveImage(att, shoePicsDir, sku)
+        );
+
+        // wait for all images to be saved with Promise .all since savePromises is still saving
+        await Promise.all(savePromises);
+        await message.react("✅");
+        return message.reply("đã lưu hình ảnh của đôi giày");
+      } catch (error) {
+        console.error("Error fetching messages in the threads:", error);
         return message.reply("tui lam bieng qua, lien he admin nhe");
       }
     }
