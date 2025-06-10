@@ -6,18 +6,26 @@ import { resolve as resolvePath } from "path"; // Renamed to avoid conflict with
  * @saveImage - Function to download and save an image from a URL
  * @param {*} Attachment - Attachment object containing the image URL and name
  * @param {*} directory - Directory where the image will be saved
- * @param {*} sku - Save for an easy look up for future references
  * @returns {Promise<string>} A promise that resolves with the unique filename on success.
  */
-export default function saveImage(Attachment, directory, sku) {
+export default function saveImage(Attachment, directory) {
   // We wrap the entire logic in a new Promise
   return new Promise((resolve, reject) => {
     try {
+      let todayDate = new Date();
+      let day = todayDate.getDate();
+      let month = todayDate.getMonth() + 1; // Months are zero-based
+      let year = todayDate.getFullYear();
+      let milliseconds = todayDate.getMilliseconds();
+      let hour = todayDate.getHours();
+      let minute = todayDate.getMinutes();
+
+      let currentTime = `${year}-${day}-${month}@[${hour}:${minute}:${milliseconds}]`;
       // get the extension of the file (png, jpeg,...)
       const fileExtention = Attachment.name.split(".").pop();
-      // Create ID name
-      const uniqueFileName = `${Date.now()}_${sku}.${fileExtention}`;
-      // draft the path  to store the image
+      const uniqueFileName = `${currentTime}.${fileExtention}`;
+
+      // Create ID image path name
       const imagePath = resolvePath(directory, uniqueFileName);
       // Ensure the directory exists
       const file = fs.createWriteStream(imagePath);

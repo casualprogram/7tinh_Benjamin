@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 import { resolve } from "path";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import fs from "fs";
-import https from "https";
 import saveImage from "../utilities/save-images.js";
 
 dotenv.config({ path: resolve("../../.env") });
@@ -102,9 +101,7 @@ client.on("messageCreate", async (message) => {
         await message.reply("Đang check đôi giày của bạn, đợi xíu nha");
 
         // get all messages in the thread so far
-
         const allMessage = await message.channel.messages.fetch({ limit: 100 });
-
         const chatHist = [];
         const imageAttachments = [];
 
@@ -112,12 +109,15 @@ client.on("messageCreate", async (message) => {
         for (const msg of allMessage.values()) {
           // if message is the command then we skip
           if (msg.id === message.id) continue;
+
+          // store message history for context
           if (msg.MessageContent) {
             chatHist.push({
               role: "user",
               content: msg.content,
             });
           }
+
           console.log(`Message from ${msg.author.tag}: ${msg.content}`);
           // if message has some sort of attachments
           if (msg.attachments.size > 0) {
@@ -136,9 +136,15 @@ client.on("messageCreate", async (message) => {
           return message.reply("hình đâu?\nđâu thấy hình nào đâu ta?");
         }
 
+        const skuDir = resolve(shoePicsDir, sku);
+        // create a directory for the SKU if it doesn't exist
+        if (!fs.existsSync(skuDir)) {
+          fs.mkdirSync(skuDir, { recursive: true });
+        }
+
         // save the images to the shoePics directory.
         const savePromises = imageAttachments.map((att) =>
-          saveImage(att, shoePicsDir, sku)
+          saveImage(att, skuDir)
         );
 
         // wait for all images to be saved with Promise .all since savePromises is still saving
