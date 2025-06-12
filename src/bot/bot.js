@@ -3,6 +3,8 @@ import { resolve } from "path";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import fs from "fs";
 import saveImage from "../utilities/save-images.js";
+import path from "path";
+import fetchSampleImages from "../utilities/fetchSampleImages.js";
 
 dotenv.config({ path: resolve("../../.env") });
 
@@ -17,7 +19,7 @@ if (!discord_token) {
   );
 }
 
-const shoePicsDir = resolve("../data/shoePics");
+const shoePicsDir = resolve("../data/legit_sample");
 
 const client = new Client({
   intents: [
@@ -100,6 +102,16 @@ client.on("messageCreate", async (message) => {
       try {
         await message.reply("Đang check đôi giày của bạn, đợi xíu nha");
 
+        // const referenceDir = path.resolve("src", "data", "legit_sample");
+
+        const referenceImageBuffers = fetchSampleImages(sku, shoePicsDir);
+
+        if (!referenceImageBuffers || referenceImageBuffers.length === 0) {
+          return message.reply(
+            `không tìm thấy hình ảnh mẫu cho mẫu SKU : ${sku} này. Vui lòng kiểm tra lại SKU hoặc liên hệ ông tín nha.`
+          );
+        }
+
         // get all messages in the thread so far
         const allMessage = await message.channel.messages.fetch({ limit: 100 });
         const chatHist = [];
@@ -119,6 +131,7 @@ client.on("messageCreate", async (message) => {
           }
 
           console.log(`Message from ${msg.author.tag}: ${msg.content}`);
+
           // if message has some sort of attachments
           if (msg.attachments.size > 0) {
             // we iterate through each attachment and check if it is an image
@@ -136,16 +149,40 @@ client.on("messageCreate", async (message) => {
           return message.reply("hình đâu?\nđâu thấy hình nào đâu ta?");
         }
 
-        const skuDir = resolve(shoePicsDir, sku);
-        // create a directory for the SKU if it doesn't exist
-        if (!fs.existsSync(skuDir)) {
-          fs.mkdirSync(skuDir, { recursive: true });
-        }
+        const userImagePromises = imageAttachments.map((att) => {
+          fetchImageToBuffer(att.url);
+        });
+        const userImageBuffers = await Promise.all(userImagePromises);
 
-        // save the images to the shoePics directory.
-        const savePromises = imageAttachments.map((att) =>
-          saveImage(att, skuDir)
+        // STEP 1 - READ MESSAGE
+        await message.reply(
+          `đã nhận ${userImageBuffers.length} hình ảnh từ bạn`
         );
+
+        // -- This is where your future logic goes --
+        // 1. Fetch reference image URLs from Supabase for the given SKU.
+        // const referenceImageUrls = await getReferenceImages(sku);
+
+        // 2. Fetch those reference images into buffers.
+        // const referenceImagePromises = referenceImageUrls.map(url => fetchImageToBuffer(url));
+        // const referenceImageBuffers = await Promise.all(referenceImagePromises);
+
+        // 3. Send both arrays of buffers to the LLM for comparison.
+        // const result = await YourLLM.compare(userImageBuffers, referenceImageBuffers);
+
+        // 4. Reply with the result.
+        // await message.reply(`Analysis Complete: ${result.summary}`);
+
+        // ---------- save the images to the shoePics directory ----------
+        // const skuDir = resolve(shoePicsDir, sku);
+        // // create a directory for the SKU if it doesn't exist
+        // if (!fs.existsSync(skuDir)) {
+        //   fs.mkdirSync(skuDir, { recursive: true });
+        // }
+        // const savePromises = imageAttachments.map((att) =>
+        //   saveImage(att, skuDir)
+        // );
+        // ---------- save the images to the shoePics directory ----------
 
         // wait for all images to be saved with Promise .all since savePromises is still saving
         await Promise.all(savePromises);
