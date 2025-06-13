@@ -11,7 +11,6 @@ export default function fetchSampleImages(sku, baseDirectory) {
       console.error(`Directory for ${sku} does not exist.`);
       return null;
     }
-    console.log("PASSed THIS BIh");
 
     // read all files in the SKU directory
     const allFiles = fs.readdirSync(skuDirectory);

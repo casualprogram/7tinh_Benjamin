@@ -1,10 +1,10 @@
 import dotenv from "dotenv";
 import { resolve } from "path";
-import { Client, GatewayIntentBits, Partials } from "discord.js";
-import fs from "fs";
-import saveImage from "../utilities/save-images.js";
-import path from "path";
+import { Client, GatewayIntentBits, Partials, EmbedBuilder } from "discord.js";
 import fetchSampleImages from "../utilities/fetchSampleImages.js";
+import fetchImageToBuffer from "../utilities/fetchImageToBuffer.js";
+import formatImagesForAI from "../utilities/formatImagesForAI.js";
+import analyzeImagesWithAI from "../utilities/analyzeImageesWithAI.js";
 
 dotenv.config({ path: resolve("../../.env") });
 
@@ -48,7 +48,9 @@ client.on("messageCreate", async (message) => {
       .substring(PREFIX.length)
       .split(/\s+/);
 
-    console.log(`Command received: ${CMD_NAME} \nwith sku: ${args.join(" ")}`);
+    console.log(
+      `Command received: ${CMD_NAME} \nwith shoe name: ${args.join(" ")}`
+    );
 
     if (CMD_NAME === "legitcheck") {
       // Handle the legit check command
@@ -101,9 +103,8 @@ client.on("messageCreate", async (message) => {
       // everything seems good, move to legit check phase
       try {
         await message.reply("Đang check đôi giày của bạn, đợi xíu nha");
-
-        // const referenceDir = path.resolve("src", "data", "legit_sample");
-
+        // STEP 1 - FETCH REFERENCE IMAGES
+        // fetch sample images for the given SKU
         const referenceImageBuffers = fetchSampleImages(sku, shoePicsDir);
 
         if (!referenceImageBuffers || referenceImageBuffers.length === 0) {
@@ -114,8 +115,8 @@ client.on("messageCreate", async (message) => {
 
         // get all messages in the thread so far
         const allMessage = await message.channel.messages.fetch({ limit: 100 });
-        const chatHist = [];
-        const imageAttachments = [];
+        const chatHist = []; // store chat history for context
+        const imageAttachments = []; // store image attachments from the user
 
         // iterate through ever message
         for (const msg of allMessage.values()) {
@@ -130,7 +131,7 @@ client.on("messageCreate", async (message) => {
             });
           }
 
-          console.log(`Message from ${msg.author.tag}: ${msg.content}`);
+          // console.log(`Message from ${msg.author.tag}: ${msg.content}`);
 
           // if message has some sort of attachments
           if (msg.attachments.size > 0) {
@@ -149,29 +150,63 @@ client.on("messageCreate", async (message) => {
           return message.reply("hình đâu?\nđâu thấy hình nào đâu ta?");
         }
 
-        const userImagePromises = imageAttachments.map((att) => {
-          fetchImageToBuffer(att.url);
+        // map through image and fetch image buffer type and storage in a format that
+        //      Vision API can easily read
+        const userImagePromises = imageAttachments.map(async (att) => {
+          const buffer = await fetchImageToBuffer(att.url);
+          return {
+            buffer,
+            contentType: att.contentType,
+          };
         });
-        const userImageBuffers = await Promise.all(userImagePromises);
 
-        // STEP 1 - READ MESSAGE
-        await message.reply(
-          `đã nhận ${userImageBuffers.length} hình ảnh từ bạn`
+        // store the final result when all promise completed
+        const userImageData = await Promise.all(userImagePromises);
+
+        // await message.reply(
+        //   `đã nhận ${userImageBuffers.length} hình ảnh từ bạn`
+        // );
+
+        // STEP 2 - FORMAT IMAGES FOR AI
+        // format both user and reference images for AI
+
+        const userImagesPayload = formatImagesForAI(userImageData);
+        const referenceImagesPayload = formatImagesForAI(referenceImageBuffers);
+
+        // STEP 3 - ANALYZE IMAGES WITH AI
+        await message.channel.sendTyping();
+        const aiResult = await analyzeImagesWithAI(
+          userImagesPayload,
+          referenceImagesPayload,
+          sku
         );
 
-        // -- This is where your future logic goes --
-        // 1. Fetch reference image URLs from Supabase for the given SKU.
-        // const referenceImageUrls = await getReferenceImages(sku);
+        console.log(`AI Analysis Result: ${aiResult}`);
 
-        // 2. Fetch those reference images into buffers.
-        // const referenceImagePromises = referenceImageUrls.map(url => fetchImageToBuffer(url));
-        // const referenceImageBuffers = await Promise.all(referenceImagePromises);
-
-        // 3. Send both arrays of buffers to the LLM for comparison.
-        // const result = await YourLLM.compare(userImageBuffers, referenceImageBuffers);
-
-        // 4. Reply with the result.
-        // await message.reply(`Analysis Complete: ${result.summary}`);
+        const resultEmbed = new EmbedBuilder()
+          .setColor(
+            aiResult.verdict === "Likely Authentic" ? 0x00ff00 : 0xff0000
+          ) // Green for authentic, Red for replica
+          .setTitle(`Legit Check Result for: ${sku}`)
+          .setAuthor({
+            name: "7tinh AI Authenticator",
+            iconURL: client.user.displayAvatarURL(),
+          })
+          .addFields(
+            { name: "Verdict", value: `**${aiResult.verdict}**`, inline: true },
+            {
+              name: "Confidence",
+              value: `**${aiResult.confidence_percentage}%**`,
+              inline: true,
+            },
+            {
+              name: "Analysis Details",
+              value: `- ${aiResult.analysis_details.join("\n- ")}`,
+            } // Format array into a bulleted list
+          )
+          .setThumbnail(imageAttachments[0].url)
+          .setTimestamp()
+          .setFooter({ text: `powered by Casual Solutions` });
 
         // ---------- save the images to the shoePics directory ----------
         // const skuDir = resolve(shoePicsDir, sku);
@@ -182,12 +217,12 @@ client.on("messageCreate", async (message) => {
         // const savePromises = imageAttachments.map((att) =>
         //   saveImage(att, skuDir)
         // );
+        // await Promise.all(savePromises);
         // ---------- save the images to the shoePics directory ----------
-
         // wait for all images to be saved with Promise .all since savePromises is still saving
-        await Promise.all(savePromises);
+
         await message.react("✅");
-        return message.reply("đã lưu hình ảnh của đôi giày");
+        return message.reply({ embeds: [resultEmbed] });
       } catch (error) {
         console.error("Error fetching messages in the threads:", error);
         return message.reply("tui lam bieng qua, lien he admin nhe");
