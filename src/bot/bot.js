@@ -5,6 +5,7 @@ import fetchSampleImages from "../utilities/fetchSampleImages.js";
 import fetchImageToBuffer from "../utilities/fetchImageToBuffer.js";
 import formatImagesForAI from "../utilities/formatImagesForAI.js";
 import analyzeImagesWithAI from "../utilities/analyzeImageesWithAI.js";
+import fetchCloudReferenceImages from "../utilities/fetchCloudReferenceImages.js";
 
 dotenv.config({ path: resolve("../../.env") });
 
@@ -105,14 +106,35 @@ client.on("messageCreate", async (message) => {
         await message.reply("Đang check đôi giày của bạn, đợi xíu nha");
         // STEP 1 - FETCH REFERENCE IMAGES
         // fetch sample images for the given SKU
-        const referenceImageBuffers = fetchSampleImages(sku, shoePicsDir);
+        // const referenceImageBuffers = fetchSampleImages(sku, shoePicsDir);
 
-        if (!referenceImageBuffers || referenceImageBuffers.length === 0) {
+        // if (!referenceImageBuffers || referenceImageBuffers.length === 0) {
+        //   return message.reply(
+        //     `không tìm thấy hình ảnh mẫu cho mẫu SKU : ${sku} này. Vui lòng kiểm tra lại SKU hoặc liên hệ ông tín nha.`
+        //   );
+        // }
+
+        // STEP 1 - FETCH REFERENCE IMAGES FROM DATABASE
+        const referenceData = await fetchCloudReferenceImages(sku);
+
+        console.log(`Reference Data for SKU ${sku}:`, referenceData);
+
+        const referenceImagePromises = referenceData.imageUrls.map((url) =>
+          fetchImageToBuffer(url)
+        );
+        const referenceImageData = await Promise.all(referenceImagePromises);
+
+        if (
+          !referenceData ||
+          !referenceData.imageUrls ||
+          referenceData.imageUrls.length === 0
+        ) {
           return message.reply(
-            `không tìm thấy hình ảnh mẫu cho mẫu SKU : ${sku} này. Vui lòng kiểm tra lại SKU hoặc liên hệ ông tín nha.`
+            "Tiếc quá, tui chưa học đôi này, kêu TEST IN PROD dạy tui với"
           );
         }
 
+        // STEP 1.1 - FETCH USER IMAGES
         // get all messages in the thread so far
         const allMessage = await message.channel.messages.fetch({ limit: 100 });
         const chatHist = []; // store chat history for context
@@ -171,7 +193,7 @@ client.on("messageCreate", async (message) => {
         // format both user and reference images for AI
 
         const userImagesPayload = formatImagesForAI(userImageData);
-        const referenceImagesPayload = formatImagesForAI(referenceImageBuffers);
+        const referenceImagesPayload = formatImagesForAI(referenceImageData);
 
         // STEP 3 - ANALYZE IMAGES WITH AI
         await message.channel.sendTyping();
@@ -221,7 +243,7 @@ client.on("messageCreate", async (message) => {
         // ---------- save the images to the shoePics directory ----------
         // wait for all images to be saved with Promise .all since savePromises is still saving
 
-        await message.react("✅");
+        await message.react("🔎");
         return message.reply({ embeds: [resultEmbed] });
       } catch (error) {
         console.error("Error fetching messages in the threads:", error);
