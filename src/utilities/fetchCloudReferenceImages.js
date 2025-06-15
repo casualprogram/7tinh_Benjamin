@@ -7,7 +7,7 @@ export default async function fetchCloudReferenceImages(sku) {
 
     const { data, error } = await supabase
       .from("shoes") // select the 'shoes' table
-      .select("name", "image_urls") // only want 'name' and 'images_urls' columns
+      .select("*") // only want 'name' and 'images_urls' columns
       .eq("sku", sku) // find row WHERE sku is equal to the provided {sku}
       .single(); //only one/single object is expected
 

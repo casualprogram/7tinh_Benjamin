@@ -6,6 +6,7 @@ import fetchImageToBuffer from "../utilities/fetchImageToBuffer.js";
 import formatImagesForAI from "../utilities/formatImagesForAI.js";
 import analyzeImagesWithAI from "../utilities/analyzeImageesWithAI.js";
 import fetchCloudReferenceImages from "../utilities/fetchCloudReferenceImages.js";
+import getContentType from "../utilities/getContentType.js";
 
 dotenv.config({ path: resolve("../../.env") });
 
@@ -104,26 +105,12 @@ client.on("messageCreate", async (message) => {
       // everything seems good, move to legit check phase
       try {
         await message.reply("Đang check đôi giày của bạn, đợi xíu nha");
-        // STEP 1 - FETCH REFERENCE IMAGES
-        // fetch sample images for the given SKU
-        // const referenceImageBuffers = fetchSampleImages(sku, shoePicsDir);
-
-        // if (!referenceImageBuffers || referenceImageBuffers.length === 0) {
-        //   return message.reply(
-        //     `không tìm thấy hình ảnh mẫu cho mẫu SKU : ${sku} này. Vui lòng kiểm tra lại SKU hoặc liên hệ ông tín nha.`
-        //   );
-        // }
 
         // STEP 1 - FETCH REFERENCE IMAGES FROM DATABASE
+        // fetch reference images from the local directory or cloud storage
         const referenceData = await fetchCloudReferenceImages(sku);
 
-        console.log(`Reference Data for SKU ${sku}:`, referenceData);
-
-        const referenceImagePromises = referenceData.imageUrls.map((url) =>
-          fetchImageToBuffer(url)
-        );
-        const referenceImageData = await Promise.all(referenceImagePromises);
-
+        // check if reference data is valid
         if (
           !referenceData ||
           !referenceData.imageUrls ||
@@ -132,6 +119,28 @@ client.on("messageCreate", async (message) => {
           return message.reply(
             "Tiếc quá, tui chưa học đôi này, kêu TEST IN PROD dạy tui với"
           );
+        }
+
+        console.log(`Reference Data for SKU ${sku}:`, referenceData);
+
+        // Fetch and processing images then stored in a format that Vision API can easily read
+        const referenceImagePromises = referenceData.imageUrls.map(
+          async (url) => {
+            const buffer = await fetchImageToBuffer(url);
+            const contentType = getContentType(url);
+            return {
+              buffer,
+              contentType,
+            };
+          }
+        );
+
+        // store the final result when all promise completed
+        const referenceImageData = await Promise.all(referenceImagePromises);
+        // check if any of the reference images have no content type
+        if (referenceImageData.some((img) => !img.contentType)) {
+          return message.reply(`
+            Đôi này có dạy mà chưa có kĩ nên không dám nói bậy, lỗi tại admin`);
         }
 
         // STEP 1.1 - FETCH USER IMAGES
@@ -152,8 +161,6 @@ client.on("messageCreate", async (message) => {
               content: msg.content,
             });
           }
-
-          // console.log(`Message from ${msg.author.tag}: ${msg.content}`);
 
           // if message has some sort of attachments
           if (msg.attachments.size > 0) {
@@ -185,12 +192,8 @@ client.on("messageCreate", async (message) => {
         // store the final result when all promise completed
         const userImageData = await Promise.all(userImagePromises);
 
-        // await message.reply(
-        //   `đã nhận ${userImageBuffers.length} hình ảnh từ bạn`
-        // );
-
         // STEP 2 - FORMAT IMAGES FOR AI
-        // format both user and reference images for AI
+        // formatting and processing both user and reference images for AI
 
         const userImagesPayload = formatImagesForAI(userImageData);
         const referenceImagesPayload = formatImagesForAI(referenceImageData);
@@ -205,6 +208,7 @@ client.on("messageCreate", async (message) => {
 
         console.log(`AI Analysis Result: ${aiResult}`);
 
+        // Generate the result embed to display the analysis result
         const resultEmbed = new EmbedBuilder()
           .setColor(
             aiResult.verdict === "Likely Authentic" ? 0x00ff00 : 0xff0000
@@ -214,6 +218,7 @@ client.on("messageCreate", async (message) => {
             name: "7tinh AI Authenticator",
             iconURL: client.user.displayAvatarURL(),
           })
+          // main message embed description with the outcome
           .addFields(
             { name: "Verdict", value: `**${aiResult.verdict}**`, inline: true },
             {
