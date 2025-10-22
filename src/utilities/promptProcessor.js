@@ -29,7 +29,11 @@ export async function reloadSystemPrompt() {
     systemPrompt = response.data;
     console.log("Ok hiểu rồi !");
   } catch (error) {
-    console.error("Failed to load or reload system prompt:", error.message);
+    console.error(
+      "Không hiểu gì hết, contact Devs ông ơi :((\n",
+      error.message
+    );
+    return;
     // Don't exit, just log the error. The bot might still run on an old prompt.
   }
 }

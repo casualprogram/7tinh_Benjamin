@@ -162,7 +162,7 @@ client.on("messageCreate", async (message) => {
     message.reply(aiResponse);
   } catch (error) {
     console.error("Error in messageCreate:", error);
-    message.reply("Something went very wrong. Please try again later.");
+    message.reply("Lên lương thì tui làm tiếp nha Ní :))))))");
   }
 });
 
