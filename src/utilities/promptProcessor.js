@@ -1,46 +1,65 @@
 import { promises as fs } from "fs";
 import path, { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-// --- We've moved the OpenAI and dotenv imports ---
-
-// --- Import our new AI service ---
+import dotenv from "dotenv";
+import axios from "axios"; // Import axios
 import { callAiApi } from "./aiService.js";
 
-// --- Setup for ES Modules (to get __dirname) ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// --- We've removed the API Key and OpenAI client init ---
+// Load .env variables
+dotenv.config({ path: resolve(__dirname, "../../.env") });
+const promptUrl = process.env.PROMPT_URL;
 
-// --- Prompt Loading (This stays the same) ---
-const promptFilePath = resolve(__dirname, "../data/prompts/benjamin.prompt");
+if (!promptUrl) {
+  throw new Error("PROMPT_URL is not set in the .env file.");
+}
 
-let systemPrompt = ""; // We'll load this once on startup
+let systemPrompt = ""; // This will act as our cache
 
-async function loadSystemPrompt() {
+/**
+ * Fetches the prompt from the online URL and updates the cache.
+ * This can be called to "hot-reload" the prompt.
+ */
+export async function reloadSystemPrompt() {
   try {
-    systemPrompt = await fs.readFile(promptFilePath, "utf-8");
-    console.log("Ok hiểu rồi"); // This message means the prompt loaded successfully
+    console.log("Fetching new prompt from URL...");
+    const response = await axios.get(promptUrl);
+    systemPrompt = response.data;
+    console.log("Ok hiểu rồi !");
   } catch (error) {
-    console.error("Failed to load system prompt:", error);
-    process.exit(1);
+    console.error("Failed to load or reload system prompt:", error.message);
+    // Don't exit, just log the error. The bot might still run on an old prompt.
   }
 }
 
 /**
  * Processes the user's input using the AI.
- * This is the main function you'll export.
- * @param {string} userInput - The user's message content.
- * @returns {Promise<string>} The AI-generated response.
+ * (This is mostly the same, just with a check)
  */
-export async function generateResponse(userInput) {
+export async function generateResponse(
+  userInput,
+  imageUrl,
+  conversationHistory = []
+) {
+  // If the prompt isn't loaded (e.g., first run), load it.
   if (!systemPrompt) {
-    throw new Error("System prompt is not loaded.");
+    console.log("Prompt is empty, loading for the first time...");
+    await reloadSystemPrompt();
+    if (!systemPrompt) {
+      // If it *still* failed, we can't continue.
+      throw new Error("System prompt could not be loaded.");
+    }
   }
 
   try {
-    // This now calls the imported function!
-    const aiResponse = await callAiApi(systemPrompt, userInput);
+    const aiResponse = await callAiApi(
+      systemPrompt,
+      userInput,
+      imageUrl,
+      conversationHistory
+    );
     return aiResponse;
   } catch (error) {
     console.error("Error generating AI response:", error);
@@ -48,5 +67,5 @@ export async function generateResponse(userInput) {
   }
 }
 
-// --- Load the prompt as soon as the app starts (Stays the same) ---
-loadSystemPrompt();
+// Load the prompt as soon as the app starts
+reloadSystemPrompt();

@@ -2,7 +2,11 @@ import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import dotenv from "dotenv";
 import { Client, GatewayIntentBits, Partials, EmbedBuilder } from "discord.js";
-import { generateResponse } from "../utilities/promptProcessor.js";
+// --- MODIFIED: Import the reload function ---
+import {
+  generateResponse,
+  reloadSystemPrompt,
+} from "../utilities/promptProcessor.js";
 
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -11,19 +15,15 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: resolve(__dirname, "../../.env") });
 
 const discord_token = process.env.DISCORD_BOT_TOKEN;
-// const PREFIX = "!Ben_oi"; // --- We don't need this anymore ---
+// --- NEW: Get the admin ID from .env ---
+const adminUserId = process.env.ADMIN_USER_ID;
 
 console.log("Discord bot token:", discord_token ? "Set" : "Not Set");
 
 if (!discord_token) {
-  throw new Error(
-    "Discord bot toke_n is not set in the environment variables."
-  );
+  throw new Error("Discord bot token is not set in the environment variables.");
 }
-
-// This directory path seems unused for now, but leaving it
-const shoePicsDir = resolve(__dirname, "../data/legit_sample");
-
+// ... (client setup is the same) ...
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -38,37 +38,127 @@ client.once("ready", () => {
   console.log(`${client.user.tag} is online and ready!`);
 });
 
+// Helper function (same as before)
+function buildOpenAiContent(message) {
+  // ... (this function is unchanged) ...
+  const content = [
+    {
+      type: "text",
+      text: message.content,
+    },
+  ];
+
+  if (message.attachments.size > 0) {
+    const attachment = message.attachments.first();
+    if (attachment?.contentType?.startsWith("image/")) {
+      content.push({
+        type: "image_url",
+        image_url: { url: attachment.url },
+      });
+    }
+  }
+  return content;
+}
+
 client.on("messageCreate", async (message) => {
-  // Ignore messages from other bots
   if (message.author.bot) return;
 
-  // --- NEW LOGIC: Check for mention ---
-  // Check if the bot's user was mentioned in the message
-  if (!message.mentions.has(client.user)) {
-    return;
-  }
-  // ------------------------------------
+  const isMentioned = message.mentions.has(client.user);
 
-  // --- Take in user prompt ---
-  // Remove the bot's mention from the message to get the clean user input
-  // This regex replaces <@USER_ID> or <@!USER_ID> (nickname) with an empty string
+  // --- MODIFIED: Get clean input first ---
   const userInput = message.content
     .replace(/<@!?${client.user.id}>/g, "")
     .trim();
 
-  // If there's no text after the mention (e.g., just "@MyBotName"), do nothing
-  if (!userInput) return;
+  // --- NEW: Check for reload command FIRST ---
+  if (isMentioned && userInput.toLowerCase() === "reload prompt") {
+    if (message.author.id === adminUserId) {
+      try {
+        await reloadSystemPrompt();
+        return message.reply(
+          "Ok ní, tui 'reload' cái prompt xong rồi. Hệ tư tưởng mới đã được cập nhật! 🔥"
+        );
+      } catch (err) {
+        return message.reply(
+          "U là trời, 'reload' bị lỗi rồi bro. Check lại cái link Gist coi."
+        );
+      }
+    } else {
+      return message.reply(
+        "Haha, 'out trình' rồi bro. Chỉ 'sếp' tui mới 'reload' được thôi. 😜"
+      );
+    }
+  }
+  // --- END OF RELOAD CHECK ---
+
+  // --- Existing reply/mention logic continues... ---
+  let imageUrl = null;
+  let conversationHistory = [];
+  const isReply = message.reference && message.reference.messageId;
+
+  // --- CHECK 1: Is this a reply to our bot? ---
+  if (isReply) {
+    try {
+      const repliedToMessage = await message.channel.messages.fetch(
+        message.reference.messageId
+      );
+
+      if (repliedToMessage.author.id === client.user.id) {
+        console.log("This is a follow-up reply.");
+        conversationHistory.push({
+          role: "assistant",
+          content: repliedToMessage.content,
+        });
+
+        if (
+          repliedToMessage.reference &&
+          repliedToMessage.reference.messageId
+        ) {
+          const originalUserMessage = await message.channel.messages.fetch(
+            repliedToMessage.reference.messageId
+          );
+          conversationHistory.unshift({
+            role: "user",
+            content: buildOpenAiContent(originalUserMessage),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch reply chain:", err);
+    }
+  }
+
+  // --- CHECK 2: Should the bot respond? ---
+  if (!isMentioned && conversationHistory.length === 0) {
+    return;
+  }
+
+  // --- Process the *new* user's image (if any) ---
+  if (message.attachments.size > 0) {
+    const attachment = message.attachments.first();
+    if (attachment.contentType?.startsWith("image/")) {
+      imageUrl = attachment.url;
+      console.log("Image found:", imageUrl);
+    }
+  }
+
+  // --- Check if there is ANY input (text or image) ---
+  // (This check now uses the userInput variable from the top)
+  if (!userInput && !imageUrl && conversationHistory.length === 0) {
+    return;
+  }
 
   // Show a "Bot is typing..." indicator
   await message.channel.sendTyping();
 
   try {
     // --- processing the prompt and generate response ---
-    // Call our new utility function and wait for the AI response
-    const aiResponse = await generateResponse(userInput);
+    const aiResponse = await generateResponse(
+      userInput,
+      imageUrl,
+      conversationHistory
+    );
 
-    // --- send back to user ---
-    // message.reply() is perfect as it pings the user back
     message.reply(aiResponse);
   } catch (error) {
     console.error("Error in messageCreate:", error);
