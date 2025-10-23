@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path, { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-import axios from "axios"; // Import axios
+import axios from "axios";
 import { callAiApi } from "./aiService.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,22 +19,18 @@ if (!promptUrl) {
 let systemPrompt = ""; // This will act as our cache
 
 /**
- * Fetches the prompt from the online URL and updates the cache.
- * This can be called to "hot-reload" the prompt.
+ * @description Fetches the prompt from the Gist/URL and updates the cache.
  */
 export async function reloadSystemPrompt() {
   try {
-    console.log("Fetching new prompt from URL...");
-    const response = await axios.get(promptUrl);
+    // Add the current timestamp as a query parameter to "bust" the cache
+    const cacheBustingUrl = `${promptUrl}?t=${Date.now()}`;
+    const response = await axios.get(cacheBustingUrl);
     systemPrompt = response.data;
-    console.log("Ok hiểu rồi !");
+    console.log("Ok hiểu rồi nhé !");
   } catch (error) {
-    console.error(
-      "Không hiểu gì hết, contact Devs ông ơi :((\n",
-      error.message
-    );
+    console.error("Failed to fetch or cache the system prompt:", error.message);
     return;
-    // Don't exit, just log the error. The bot might still run on an old prompt.
   }
 }
 

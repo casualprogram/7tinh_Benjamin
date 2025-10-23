@@ -14,7 +14,7 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: resolve(__dirname, "../../.env") });
 
-const discord_token = process.env.DISCORD_BOT_TOKEN;
+const discord_token = process.env.DISCORD_BOT_TOKEN2;
 // --- NEW: Get the admin ID from .env ---
 const adminUserId = process.env.ADMIN_USER_ID;
 
