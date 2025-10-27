@@ -41,7 +41,9 @@ export async function reloadSystemPrompt() {
 export async function generateResponse(
   userInput,
   imageUrl,
-  conversationHistory = []
+  conversationHistory = [],
+  currentDate,
+  isAdmin
 ) {
   // If the prompt isn't loaded (e.g., first run), load it.
   if (!systemPrompt) {
@@ -58,7 +60,9 @@ export async function generateResponse(
       systemPrompt,
       userInput,
       imageUrl,
-      conversationHistory
+      conversationHistory,
+      currentDate,
+      isAdmin
     );
     return aiResponse;
   } catch (error) {
@@ -67,5 +71,4 @@ export async function generateResponse(
   }
 }
 
-// Load the prompt as soon as the app starts
 reloadSystemPrompt();

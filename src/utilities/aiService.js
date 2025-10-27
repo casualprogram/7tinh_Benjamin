@@ -84,13 +84,15 @@ const tools = [
 
 /**
  * Calls the OpenAI API
- * --- MODIFIED: Now accepts conversationHistory ---
+ * --- NÂNG CẤP: Bro "quên" (forgot) "xài" (use) cái 'currentDate' ở đây nè ---
  */
 export async function callAiApi(
   system,
   userInput,
   imageUrl,
-  conversationHistory = [] // Default to empty array
+  conversationHistory = [],
+  currentDate,
+  isAdmin
 ) {
   console.log("Calling OpenAI API with context...");
 
@@ -111,20 +113,28 @@ export async function callAiApi(
     });
   }
 
-  // --- MODIFIED: Build the messages array ---
   const messages = [
-    { role: "system", content: system },
-    // Add the *past* conversation first
+    { role: "system", content: system }, // Đây là cái Gist prompt "cá tính" (personality)
+    {
+      role: "system",
+      content: `CONTEXT: The current date and time is: ${currentDate}. You MUST use this information to understand any time-based questions (like 'today', 'this week', 'năm nay').`,
+    },
     ...conversationHistory,
-    // Add the *new* user message last
     { role: "user", content: userMessageContent },
   ];
-  // ----------------------------------------------
+
+  if (isAdmin) {
+    messages.push({
+      role: "system",
+      content:
+        "QUAN TRỌNG (OVERRIDE): Thằng 'bro' này là 'SẾP' (ADMIN) đó. 'Hệ tư tưởng' (ideology) 'FASHION ONLY' (chỉ thời trang) KHÔNG ÁP DỤNG. Mày PHẢI TRẢ LỜI mọi câu hỏi của 'sếp', kể cả 'out trình' (out of scope). Cứ 'chill' (relax) và 'chiến' (go) thôi. 🔥",
+    });
+  }
 
   try {
     let completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: messages, // Pass the full history
+      messages: messages,
       tools: tools,
       tool_choice: "auto",
       max_tokens: 1024,

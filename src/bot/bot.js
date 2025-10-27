@@ -18,6 +18,8 @@ const discord_token = process.env.DISCORD_BOT_TOKEN;
 // --- NEW: Get the admin ID from .env ---
 const adminUserId = process.env.ADMIN_USER_ID;
 
+const adminRoleId = process.env.ADMIN_ROLE_ID;
+
 console.log("Discord bot token:", discord_token ? "Set" : "Not Set");
 
 if (!discord_token) {
@@ -151,12 +153,31 @@ client.on("messageCreate", async (message) => {
   // Show a "Bot is typing..." indicator
   await message.channel.sendTyping();
 
+  const currentDate = new Date().toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    timeZoneName: "short",
+  });
+
+  let isAdmin = false;
+  if (message.member && message.member.roles.cache.has(adminRoleId)) {
+    isAdmin = true;
+    console.log("ADMIN HỎI !");
+  }
+
   try {
     // --- processing the prompt and generate response ---
     const aiResponse = await generateResponse(
       userInput,
       imageUrl,
-      conversationHistory
+      conversationHistory,
+      currentDate,
+      isAdmin
     );
 
     message.reply(aiResponse);
