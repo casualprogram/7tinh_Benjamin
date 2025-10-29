@@ -14,11 +14,10 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: resolve(__dirname, "../../.env") });
 
-const discord_token = process.env.DISCORD_BOT_TOKEN;
-// --- NEW: Get the admin ID from .env ---
+const discord_token = process.env.DISCORD_BOT_TOKEN2;
 const adminUserId = process.env.ADMIN_USER_ID;
-
 const adminRoleId = process.env.ADMIN_ROLE_ID;
+const logWebhookUrl = process.env.LOG_WEBHOOK_URL;
 
 console.log("Discord bot token:", discord_token ? "Set" : "Not Set");
 
@@ -130,12 +129,10 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // --- CHECK 2: Should the bot respond? ---
   if (!isMentioned && conversationHistory.length === 0) {
     return;
   }
 
-  // --- Process the *new* user's image (if any) ---
   if (message.attachments.size > 0) {
     const attachment = message.attachments.first();
     if (attachment.contentType?.startsWith("image/")) {
@@ -144,14 +141,41 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // --- Check if there is ANY input (text or image) ---
-  // (This check now uses the userInput variable from the top)
   if (!userInput && !imageUrl && conversationHistory.length === 0) {
     return;
   }
 
-  // Show a "Bot is typing..." indicator
-  await message.channel.sendTyping();
+  try {
+    await message.channel.sendTyping();
+  } catch (typingError) {
+    // LỖI "CHÍ MẠNG" (CRITICAL BUG) 50001 (ĐÉO CÓ QUYỀN)
+    if (typingError.code === 50001) {
+      console.warn(
+        `ĐM THUA: Đéo "type" (gõ) được trong channel: ${message.channel.name}. (Missing Access)`
+      );
+
+      // --- LOGIC "NÉM LỖI" (THROW ERROR) QUA "WEBHOOK" (WEBHOOK) ---
+      if (logWebhookUrl) {
+        try {
+          // "Tạo" (Build) cái "cục gạch" (brick) "lỗi" (error)
+          const errorMessage =
+            `SẾP ƠI CỨU TUI! <@${adminUserId}>\n` +
+            `Tui bị lỗi **50001: Missing Access** (đéo có quyền) khi tui 'cố' 'type' (gõ) trong kênh: **#${message.channel.name}** (ID: ${message.channel.id})\n` +
+            `Sếp 'check' (kiểm tra) lẹ cái 'permission' (quyền) **View Channel** và **Send Messages** của tui trong kênh đó đi. Đm thua. 💀`;
+          await axios.post(logWebhookUrl, {
+            content: errorMessage,
+            username: "Ben Lỗi (Bot Errors)",
+          });
+        } catch (logError) {
+          console.error(
+            `ĐM THUA HƠN NỮA: Đéo "gửi log" (send log) qua "webhook" (webhook) được. Lỗi: ${logError.message}`
+          );
+        }
+      }
+    } else {
+      console.warn("LỖI 'SEND TYPING' (IGNORING):", typingError.message);
+    }
+  }
 
   const currentDate = new Date().toLocaleString("en-US", {
     timeZone: "America/Chicago",
