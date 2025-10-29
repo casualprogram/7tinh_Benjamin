@@ -84,7 +84,6 @@ const tools = [
 
 /**
  * Calls the OpenAI API
- * --- NÂNG CẤP: Bro "quên" (forgot) "xài" (use) cái 'currentDate' ở đây nè ---
  */
 export async function callAiApi(
   system,
