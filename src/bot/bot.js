@@ -170,6 +170,7 @@ client.on("messageCreate", async (message) => {
           console.error(
             `ĐM THUA HƠN NỮA: Đéo "gửi log" (send log) qua "webhook" (webhook) được. Lỗi: ${logError.message}`
           );
+          return;
         }
       }
     } else {
